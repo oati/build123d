@@ -194,6 +194,21 @@ def new_context(func):
     return wrapper
 
 
+def new_context_with_arg(func):
+    """Function decorator to specify that a function should not preserve the caller's builder context.
+    The first argument will be assigned the caller's context."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        context = Builder._get_context()
+        reset_tok = Builder._current.set(None)
+        result = func(context, *args, **kwargs)
+        Builder._current.reset(reset_tok)
+        return result
+
+    return wrapper
+
+
 class Builder(ABC, Generic[ShapeT]):
     """Builder
 
