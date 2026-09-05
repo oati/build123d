@@ -624,10 +624,10 @@ class ExportDXF(Export2D):
             for s in shape:
                 self._add_single_shape(s, layer)
         if self._non_planar_point_count > 0:
-            print("WARNING, exporting non-planar shape to 2D format.")
-            print("  This is probably not what you want.")
-            print(
-                f"  {self._non_planar_point_count} points found outside the XY plane."
+            warn(
+                "Exporting non-planar shape to 2D format; "
+                f"{self._non_planar_point_count} points found outside the XY plane.",
+                stacklevel=2,
             )
         return self
 
@@ -1181,10 +1181,10 @@ class ExportSVG(Export2D):
 
         layer.elements.extend(elements)
         if self._non_planar_point_count > 0:
-            print("WARNING, exporting non-planar shape to 2D format.")
-            print("  This is probably not what you want.")
-            print(
-                f"  {self._non_planar_point_count} points found outside the XY plane."
+            warn(
+                "Exporting non-planar shape to 2D format; "
+                f"{self._non_planar_point_count} points found outside the XY plane.",
+                stacklevel=3,
             )
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

@@ -25,6 +25,7 @@ from build123d import (
     RegularPolygon,
     Circle,
     PolarLocations,
+    Rectangle,
     BuildPart,
     Edge,
     Face,
@@ -34,6 +35,8 @@ from build123d import (
     insert,
     mirror,
     section,
+    Pos,
+    Rot,
     Spline,
     ThreePointArc,
     Unit,
@@ -301,6 +304,14 @@ class ExportersValidationTestCase(unittest.TestCase):
         svg = ExportSVG()
         with self.assertRaisesRegex(ValueError, "Edge is empty"):
             svg._edge_segments(Edge(), False)
+
+    def test_non_planar_shape_warns(self):
+        """Both exporters flatten to 2D, so points off the XY plane are lost."""
+        tilted = Pos(Z=5) * Rot(X=30) * Rectangle(10, 10)
+        for exporter in (ExportDXF(), ExportSVG()):
+            with self.subTest(exporter=type(exporter).__name__):
+                with self.assertWarnsRegex(UserWarning, "non-planar shape"):
+                    exporter.add_shape(tilted)
 
     def test_svg_nothing_to_export(self):
         with self.assertRaisesRegex(ValueError, "No shapes to export"):
