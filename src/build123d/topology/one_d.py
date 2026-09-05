@@ -235,7 +235,6 @@ from .shape_core import (
     SkipClean,
     downcast,
     get_top_level_topods_shapes,
-    shapetype,
     topods_dim,
     unwrap_topods_compound,
 )
@@ -556,21 +555,6 @@ class Mixin1D(Shape[TOPODS]):
         return 0.0
 
     # ---- Class Methods ----
-
-    @classmethod
-    def cast(cls, obj: TopoDS_Shape) -> Vertex | Edge | Wire:
-        "Returns the right type of wrapper, given a OCCT object"
-
-        # Extend the lookup table with additional entries
-        constructor_lut = {
-            ta.TopAbs_VERTEX: Vertex,
-            ta.TopAbs_EDGE: Edge,
-            ta.TopAbs_WIRE: Wire,
-        }
-
-        shape_type = shapetype(obj)
-        # NB downcast is needed to handle TopoDS_Shape types
-        return constructor_lut[shape_type](downcast(obj))
 
     @classmethod
     def extrude(
@@ -4753,3 +4737,7 @@ def topo_explore_connected_faces(
         unique_faces.append(TopoDS.Face(unique_face_map(i + 1)))
 
     return unique_faces
+
+
+Shape.register_shape_constructor(ta.TopAbs_EDGE, Edge)
+Shape.register_shape_constructor(ta.TopAbs_WIRE, Wire)

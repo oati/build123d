@@ -176,6 +176,7 @@ TrimmingTool = Union[Plane, "Shell", "Face"]
 TOPODS = TypeVar("TOPODS", bound=TopoDS_Shape)
 CalcFn = Callable[[TopoDS_Shape, GProp_GProps], None]
 CompositeFactory = Callable[[Iterable["Shape"]], "Shape"]
+ShapeConstructor = Callable[[Any], "Shape"]
 
 
 class Shape(NodeMixin, Generic[TOPODS]):
@@ -201,6 +202,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
 
     build123d_type: ClassVar[str] = "Shape"
     composite_factories: ClassVar[dict[int | None, CompositeFactory]] = {}
+    shape_constructors: ClassVar[dict[TopAbs_ShapeEnum, ShapeConstructor]] = {}
 
     shape_LUT = {
         ta.TopAbs_VERTEX: "Vertex",
@@ -685,9 +687,27 @@ class Shape(NodeMixin, Generic[TOPODS]):
     # ---- Class Methods ----
 
     @classmethod
-    @abstractmethod
-    def cast(cls: type[Self], obj: TopoDS_Shape) -> Self:
+    def register_shape_constructor(
+        cls, shape_type: TopAbs_ShapeEnum, constructor: ShapeConstructor
+    ) -> None:
+        """Register a wrapper class for a TopAbs type without importing it here.
+
+        Each topology module registers the classes it defines as it is imported,
+        so that :meth:`cast` can build any shape without shape_core needing to
+        import classes that in turn import it.
+        """
+        cls.shape_constructors[shape_type] = constructor
+
+    @classmethod
+    def cast(cls, obj: TopoDS_Shape) -> Shape:
         """Returns the right type of wrapper, given a OCCT object"""
+
+        try:
+            constructor = cls.shape_constructors[shapetype(obj)]
+        except KeyError as exc:
+            raise ValueError(f"Unable to cast {obj.ShapeType()}") from exc
+        # NB downcast is needed to handle TopoDS_Shape types
+        return constructor(downcast(obj))
 
     @classmethod
     @abstractmethod

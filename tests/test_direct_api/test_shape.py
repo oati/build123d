@@ -785,5 +785,59 @@ class TestGlobalLocation(unittest.TestCase):
         )
 
 
+class TestShapeCast(unittest.TestCase):
+    """Shape.cast is driven by the constructor registry each module fills"""
+
+    def setUp(self):
+        self.box = Box(1, 1, 1)
+
+    def test_every_topology_type_round_trips(self):
+        samples = {
+            Vertex: self.box.vertices()[0],
+            Edge: self.box.edges()[0],
+            Face: self.box.faces()[0],
+            Shell: self.box.shells()[0],
+            Solid: self.box.solids()[0],
+            Compound: self.box,
+        }
+        for expected, shape in samples.items():
+            with self.subTest(expected=expected.__name__):
+                self.assertIsInstance(Shape.cast(shape.wrapped), expected)
+
+    def test_cast_is_the_same_from_any_class(self):
+        """The registry is shared, so a 2D class can cast a solid - the old
+        per-module lookup tables raised KeyError beyond their own dimension"""
+        solid = self.box.solids()[0].wrapped
+        for caller in (Vertex, Edge, Face, Shell, Solid, Compound, Shape):
+            with self.subTest(caller=caller.__name__):
+                self.assertIsInstance(caller.cast(solid), Solid)
+
+    def test_unregistered_type_is_reported(self):
+        from OCP.TopoDS import TopoDS_Shape
+
+        registered = dict(Shape.shape_constructors)
+        try:
+            Shape.shape_constructors.clear()
+            with self.assertRaisesRegex(ValueError, "Unable to cast"):
+                Shape.cast(self.box.wrapped)
+        finally:
+            Shape.shape_constructors.update(registered)
+
+    def test_registry_covers_every_wrapped_type(self):
+        import OCP.TopAbs as ta
+
+        expected = {
+            ta.TopAbs_VERTEX,
+            ta.TopAbs_EDGE,
+            ta.TopAbs_WIRE,
+            ta.TopAbs_FACE,
+            ta.TopAbs_SHELL,
+            ta.TopAbs_SOLID,
+            ta.TopAbs_COMPOUND,
+            ta.TopAbs_COMPSOLID,
+        }
+        self.assertEqual(set(Shape.shape_constructors), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

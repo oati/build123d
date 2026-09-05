@@ -85,7 +85,6 @@ from OCP.TopoDS import (
     TopoDS_Builder,
     TopoDS_Compound,
     TopoDS_Iterator,
-    TopoDS_Shape,
 )
 from anytree import PreOrderIter
 from build123d.build_enums import Align, CenterOf, FontStyle, TextAlign, Unit
@@ -107,7 +106,6 @@ from .shape_core import (
     ShapeList,
     Joint,
     downcast,
-    shapetype,
     topods_dim,
     _make_topods_compound_from_shapes,
 )
@@ -198,28 +196,6 @@ class Compound(Mixin3D[TopoDS_Compound]):
         return sum(masses)
 
     # ---- Class Methods ----
-
-    @classmethod
-    def cast(
-        cls, obj: TopoDS_Shape
-    ) -> Vertex | Edge | Wire | Face | Shell | Solid | Compound:
-        "Returns the right type of wrapper, given a OCCT object"
-
-        # define the shape lookup table for casting
-        constructor_lut = {
-            ta.TopAbs_VERTEX: Vertex,
-            ta.TopAbs_EDGE: Edge,
-            ta.TopAbs_WIRE: Wire,
-            ta.TopAbs_FACE: Face,
-            ta.TopAbs_SHELL: Shell,
-            ta.TopAbs_SOLID: Solid,
-            ta.TopAbs_COMPOUND: Compound,
-            ta.TopAbs_COMPSOLID: Compound,
-        }
-
-        shape_type = shapetype(obj)
-        # NB downcast is needed to handle TopoDS_Shape types
-        return constructor_lut[shape_type](downcast(obj))
 
     @classmethod
     def extrude(cls, obj: Shell, direction: VectorLike) -> Compound:
@@ -1027,3 +1003,7 @@ Shape.register_composite_factory(None, Compound)
 Shape.register_composite_factory(1, Curve)
 Shape.register_composite_factory(2, Sketch)
 Shape.register_composite_factory(3, Part)
+
+
+Shape.register_shape_constructor(ta.TopAbs_COMPOUND, Compound)
+Shape.register_shape_constructor(ta.TopAbs_COMPSOLID, Compound)
