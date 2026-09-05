@@ -1,16 +1,40 @@
-Retire the last two duplicate-code reports
+[MAIN]
 
-Two more repetitions of the kind the cast registry removed, and both had the same cause: a module can only name the classes it is allowed to import.
+extension-pkg-allow-list=OCP
 
-Plane.__rmul__ and Shape.__rmul__ had byte-identical bodies. They now share geometry.apply_location_like, typed against a Movable protocol so each caller keeps its own return type.
+[BASIC]
 
-The isinstance chain converting Vector, Location, Axis and Plane into Vertex, Edge and Face appeared in two_d, three_d and composite. Shape now holds a geometry_constructors registry, filled where each target class is defined - zero_d registers Vector and Location, one_d Axis, two_d Plane - and Shape.as_shape reads it.
+# Good variable names which should always be accepted, separated by a comma
+good-names=i,j,k,u,v,x,y,z,ex,Run,_,X,Y,Z,XY,YZ,ZX,XZ,YX,ZY
 
-Two details the conversion depends on. The lookup walks the operand's MRO rather than matching its exact type, because Pos and Rotation derive from Location and an exact match would silently skip them. And as_shape is typed to return a Shape: the chain it replaces also narrowed the operand for the type checker, and mypy reports ten errors if the helper returns Any.
+# Type aliases follow class-like PascalCase naming, e.g. Align2D.
+typealias-rgx=^_?[A-Z][A-Za-z0-9]*$
 
-one_d and zero_d keep their own versions. one_d cannot import Face, so it handles a Plane further down by building an OCP face directly, and zero_d answers Axis and Plane with containment tests instead of converting an infinite axis into an Edge. Routing either through the registry would change behaviour.
+# Type variables follow PEP 484-style short names, optionally covariant/contravariant.
+typevar-rgx=^_?[A-Z][A-Za-z0-9]*(_co|_contra)?$
 
-Verified by diffing a 56 combination matrix of shape.intersect(other), 7 shape types by 8 operand types, against a tree with only this change reverted: identical throughout.
+disable=
+    unsubscriptable-object,       # False positives
+    use-a-generator,              # all([..]) is just fine
+    protected-access,             # _variable to be hidden from external users
+    too-few-public-methods,       # Objects and Operations will not have methods outside of _init
+    too-many-public-methods,      # .. but some of classes have many methods
+    too-many-lines,               # the classes are complex
+    too-many-locals,              # algorithms are complex and depend on many objects
+    too-many-branches,            # algorithms are complex - this is not helpful
+    too-many-statements,          # algorithms are complex - this is not helpful
+    too-many-instance-attributes  # not helpful 
 
-Also sets min-similarity-lines to 7. At the default of 4 the checker flagged things like the four string literals naming a shared keyword argument list; 7 leaves it able to report duplication worth acting on.
+ignore-paths=
+    ./src/build123d/_version.py # Generated
 
+ignored-modules=OCP,vtkmodules,scipy.spatial,ezdxf,anytree,IPython,trianglesolver,scipy,numpy
+
+[DESIGN]
+max-args=10
+max-positional-arguments=10
+
+[SIMILARITIES]
+# Constructor plumbing and dimension-parallel topology methods are structurally
+# alike by design; four lines flags shapes rather than duplication.
+min-similarity-lines=7
