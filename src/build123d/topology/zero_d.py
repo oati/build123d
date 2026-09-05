@@ -354,3 +354,7 @@ def topo_explore_common_vertex(
 
 
 Shape.register_shape_constructor(ta.TopAbs_VERTEX, Vertex)
+Shape.register_geometry_constructor(Vector, Vertex)
+Shape.register_geometry_constructor(
+    Location, lambda location: Vertex(location.position)
+)

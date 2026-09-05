@@ -4741,3 +4741,4 @@ def topo_explore_connected_faces(
 
 Shape.register_shape_constructor(ta.TopAbs_EDGE, Edge)
 Shape.register_shape_constructor(ta.TopAbs_WIRE, Wire)
+Shape.register_geometry_constructor(Axis, Edge)

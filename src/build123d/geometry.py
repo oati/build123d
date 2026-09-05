@@ -46,6 +46,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
+    Protocol,
     Type,
     TypeAlias,
     TypeVar,
@@ -3202,17 +3203,7 @@ class Plane(metaclass=PlaneMeta):
     def __rmul__(
         self, other: Location | Plane | Iterable[Location | Plane]
     ) -> Plane | list[Plane]:
-        if isinstance(other, Location | Plane):
-            return self.moved(other)
-        try:
-            return [self.moved(loc) for loc in all_location_like(other)]
-        except NotAllLocationLikeError as e:
-            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}") from e
-        except TypeError:  # not iterable
-            pass
-        raise TypeError(
-            f"{type(self).__name__} cannot be multiplied by {type(other).__name__}"
-        )
+        return apply_location_like(self, other)
 
     def __and__(self: Plane, other: Axis | Location | Plane | VectorLike | Shape):
         """intersect plane with other &"""
@@ -3685,3 +3676,44 @@ def all_location_like(items: Iterable[Any]) -> list[Location | Plane]:
     ):
         raise NotAllLocationLikeError(wrong_types)
     return items
+
+
+class Movable(Protocol):
+    """Something that can be repositioned by a Location or a Plane."""
+
+    def moved(self, loc: Location | Plane) -> Any:
+        """Return a copy of self moved to a relative location"""
+
+
+MovableT = TypeVar("MovableT", bound=Movable)
+
+
+def apply_location_like(
+    obj: MovableT, other: Location | Plane | Iterable[Location | Plane]
+) -> MovableT | list[MovableT]:
+    """Position obj by a Location or Plane, or once per item of an iterable.
+
+    Shared by the ``__rmul__`` of Plane and Shape so that ``Plane.XZ * shape``
+    and ``[Pos(1), Pos(2)] * shape`` behave identically for both.
+
+    Args:
+        obj (MovableT): object to reposition
+        other (Location | Plane | Iterable): where to put it
+
+    Raises:
+        TypeError: other is not location-like, or an iterable of location-like
+
+    Returns:
+        MovableT | list[MovableT]: the placed copy, or one per location
+    """
+    if isinstance(other, Location | Plane):
+        return cast(MovableT, obj.moved(other))
+    try:
+        return [cast(MovableT, obj.moved(loc)) for loc in all_location_like(other)]
+    except NotAllLocationLikeError as e:
+        raise TypeError(f"{type(obj).__name__} cannot be multiplied by {e}") from e
+    except TypeError:  # not iterable
+        pass
+    raise TypeError(
+        f"{type(obj).__name__} cannot be multiplied by {type(other).__name__}"
+    )

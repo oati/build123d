@@ -152,12 +152,11 @@ from build123d.geometry import (
     ColorLike,
     Location,
     Matrix,
-    NotAllLocationLikeError,
     OrientedBoundBox,
     Plane,
     Vector,
     VectorLike,
-    all_location_like,
+    apply_location_like,
     logger,
 )
 from build123d.pack_utils import _pack2d
@@ -177,6 +176,7 @@ TOPODS = TypeVar("TOPODS", bound=TopoDS_Shape)
 CalcFn = Callable[[TopoDS_Shape, GProp_GProps], None]
 CompositeFactory = Callable[[Iterable["Shape"]], "Shape"]
 ShapeConstructor = Callable[[Any], "Shape"]
+GeometryConstructor = Callable[[Any], "Shape"]
 
 
 class Shape(NodeMixin, Generic[TOPODS]):
@@ -203,6 +203,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
     build123d_type: ClassVar[str] = "Shape"
     composite_factories: ClassVar[dict[int | None, CompositeFactory]] = {}
     shape_constructors: ClassVar[dict[TopAbs_ShapeEnum, ShapeConstructor]] = {}
+    geometry_constructors: ClassVar[dict[type, GeometryConstructor]] = {}
 
     shape_LUT = {
         ta.TopAbs_VERTEX: "Vertex",
@@ -699,6 +700,35 @@ class Shape(NodeMixin, Generic[TOPODS]):
         cls.shape_constructors[shape_type] = constructor
 
     @classmethod
+    def register_geometry_constructor(
+        cls, geometry_type: type, constructor: GeometryConstructor
+    ) -> None:
+        """Register how a geometry class becomes a Shape, without importing it.
+
+        Registered by whichever topology module defines the target class, since
+        the lower modules cannot import the higher ones.
+        """
+        cls.geometry_constructors[geometry_type] = constructor
+
+    @classmethod
+    def as_shape(cls, obj: Shape | Vector | Location | Axis | Plane) -> Shape:
+        """Return the Shape equivalent of a geometry object.
+
+        Vector and Location become a Vertex, Axis an Edge and Plane a Face.
+        A Shape is returned unchanged. Subclasses are honoured, so Pos and
+        Rotation convert like the Location they derive from.
+
+        The return type is what makes this usable in place of an isinstance
+        chain: the chain narrowed the operand to a Shape for type checkers, and
+        this has to do the same.
+        """
+        for geometry_type in type(obj).__mro__:
+            constructor = cls.geometry_constructors.get(geometry_type)
+            if constructor is not None:
+                return constructor(obj)
+        return tcast("Shape", obj)
+
+    @classmethod
     def cast(cls, obj: TopoDS_Shape) -> Shape:
         """Returns the right type of wrapper, given a OCCT object"""
 
@@ -1113,17 +1143,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
     def __rmul__(self, other: Iterable[Plane | Location]) -> list[Self]: ...
     def __rmul__(self, other: Plane | Location | Iterable[Plane | Location]):
         """right multiply for positioning operator *"""
-        if isinstance(other, Location | Plane):
-            return self.moved(other)
-        try:
-            return [self.moved(loc) for loc in all_location_like(other)]
-        except NotAllLocationLikeError as e:
-            raise TypeError(f"{type(self).__name__} cannot be multiplied by {e}") from e
-        except TypeError:  # not iterable
-            pass
-        raise TypeError(
-            f"{type(self).__name__} cannot be multiplied by {type(other).__name__}"
-        )
+        return apply_location_like(self, other)
 
     @overload
     def __sub__(self, other: None) -> Self: ...

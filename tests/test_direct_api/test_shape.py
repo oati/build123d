@@ -839,5 +839,38 @@ class TestShapeCast(unittest.TestCase):
         self.assertEqual(set(Shape.shape_constructors), expected)
 
 
+class TestAsShape(unittest.TestCase):
+    """Geometry objects convert through the registry each module fills"""
+
+    def test_geometry_types_convert(self):
+        expected = {
+            Vector(1, 2, 3): Vertex,
+            Location((1, 2, 3)): Vertex,
+            Axis.X: Edge,
+            Plane.XY: Face,
+        }
+        for geometry, shape_type in expected.items():
+            with self.subTest(geometry=type(geometry).__name__):
+                self.assertIsInstance(Shape.as_shape(geometry), shape_type)
+
+    def test_location_subclasses_convert_like_location(self):
+        """Pos and Rotation derive from Location, so an exact-type lookup
+        would miss them"""
+        for geometry in (Pos(1, 2, 3), Rotation(0, 0, 45)):
+            with self.subTest(geometry=type(geometry).__name__):
+                vertex = Shape.as_shape(geometry)
+                self.assertIsInstance(vertex, Vertex)
+        self.assertEqual(tuple(Shape.as_shape(Pos(1, 2, 3)).center()), (1, 2, 3))
+
+    def test_shapes_pass_through_unchanged(self):
+        edge = Edge.make_line((0, 0, 0), (1, 0, 0))
+        self.assertIs(Shape.as_shape(edge), edge)
+
+    def test_registry_covers_the_geometry_types(self):
+        self.assertEqual(
+            set(Shape.geometry_constructors), {Vector, Location, Axis, Plane}
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

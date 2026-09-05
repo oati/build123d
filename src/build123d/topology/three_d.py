@@ -453,14 +453,7 @@ class Mixin3D(Shape[TOPODS]):
                 (shapes touching the solid's surface without penetrating)
         """
         # Convert geometry objects to shapes
-        if isinstance(other, Vector):
-            other = Vertex(other)
-        elif isinstance(other, Location):
-            other = Vertex(other.position)
-        elif isinstance(other, Axis):
-            other = Edge(other)
-        elif isinstance(other, Plane):
-            other = Face(other)
+        other = Shape.as_shape(other)
 
         def filter_redundant_touches(items: ShapeList) -> ShapeList:
             """Remove vertices/edges that lie on higher-dimensional results."""

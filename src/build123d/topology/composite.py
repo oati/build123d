@@ -746,14 +746,7 @@ class Compound(Mixin3D[TopoDS_Compound]):
                 (only relevant when Solids are involved)
         """
         # Convert geometry objects
-        if isinstance(other, Vector):
-            other = Vertex(other)
-        elif isinstance(other, Location):
-            other = Vertex(other.position)
-        elif isinstance(other, Axis):
-            other = Edge(other)
-        elif isinstance(other, Plane):
-            other = Face(other)
+        other = Shape.as_shape(other)
 
         # Get self elements: assembly children or OCCT direct children
         if self.children:

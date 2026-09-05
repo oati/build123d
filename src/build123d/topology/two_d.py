@@ -435,14 +435,7 @@ class Mixin2D(ABC, Shape[TOPODS]):
                 (only relevant when Solids are involved)
         """
         # Convert geometry objects to shapes
-        if isinstance(other, Vector):
-            other = Vertex(other)
-        elif isinstance(other, Location):
-            other = Vertex(other.position)
-        elif isinstance(other, Axis):
-            other = Edge(other)
-        elif isinstance(other, Plane):
-            other = Face(other)
+        other = Shape.as_shape(other)
 
         def filter_edges(
             section_edges: ShapeList[Edge], common_edges: ShapeList[Edge]
@@ -3059,3 +3052,4 @@ def sort_wires_by_build_order(wire_list: list[Wire]) -> list[list[Wire]]:
 
 Shape.register_shape_constructor(ta.TopAbs_FACE, Face)
 Shape.register_shape_constructor(ta.TopAbs_SHELL, Shell)
+Shape.register_geometry_constructor(Plane, Face)
