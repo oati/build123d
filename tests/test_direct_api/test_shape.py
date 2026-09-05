@@ -839,6 +839,51 @@ class TestShapeCast(unittest.TestCase):
         self.assertEqual(set(Shape.shape_constructors), expected)
 
 
+class TestTransformShape(unittest.TestCase):
+    """transform_shape is the type-preserving counterpart to
+    transform_geometry, which its docstring points users at."""
+
+    def test_rigid_transform_keeps_type_and_size(self):
+        box = Solid.make_box(1, 2, 3)
+        matrix = Matrix()
+        matrix.rotate(Axis.Z, 90)
+        rotated = box.transform_shape(matrix)
+
+        self.assertIsInstance(rotated, Solid)
+        self.assertAlmostEqual(rotated.volume, box.volume, 6)
+        self.assertAlmostEqual(rotated.bounding_box().size.X, 2, 6)
+        self.assertAlmostEqual(rotated.bounding_box().size.Y, 1, 6)
+
+    def test_original_is_left_alone(self):
+        box = Solid.make_box(1, 2, 3)
+        matrix = Matrix()
+        matrix.rotate(Axis.Z, 90)
+        rotated = box.transform_shape(matrix)
+
+        self.assertIsNot(rotated, box)
+        self.assertAlmostEqual(box.bounding_box().size.X, 1, 6)
+
+
+class TestShapeAlgebraEdges(unittest.TestCase):
+    def test_add_none_returns_self(self):
+        # Compound overrides __add__, so exercise the Shape implementation
+        # with a shape that does not: a bare Solid.
+        solid = Solid.make_box(1, 1, 1)
+        self.assertIs(solid + None, solid)
+
+    def test_intersect_with_no_arguments(self):
+        self.assertIsNone(Box(1, 1, 1).intersect())
+
+    def test_intersect_yielding_disjoint_pieces(self):
+        """A bar crossing two separated blocks intersects in two solids, which
+        come back as a single composite rather than a list."""
+        bar = Box(20, 1, 1)
+        blocks = Pos(-6, 0, 0) * Box(2, 2, 2) + Pos(6, 0, 0) * Box(2, 2, 2)
+        result = bar & blocks
+        self.assertEqual(len(result.solids()), 2)
+        self.assertAlmostEqual(result.volume, 4, 5)
+
+
 class TestMakeComposite(unittest.TestCase):
     def test_unregistered_factory(self):
         with patch.object(Shape, "composite_factories", {}):

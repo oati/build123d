@@ -1653,7 +1653,9 @@ class Face(Mixin2D[TopoDS_Face]):
                 3 weights use for variational smoothing. Defaults to None.
             min_deg (int, optional): minimum spline degree. Enforced only when
                 smoothing is None. Defaults to 1.
-            max_deg (int, optional): maximum spline degree. Defaults to 3.
+            max_deg (int, optional): maximum spline degree. Defaults to 3. Raised
+                to 5 when smoothing is used, the lowest degree that can meet the
+                C2 continuity the smoothing algorithm requires.
 
         Raises:
             ValueError: B-spline approximation failed
@@ -1668,8 +1670,10 @@ class Face(Mixin2D[TopoDS_Face]):
                 points_.SetValue(i + 1, j + 1, Vector(point).to_pnt())
 
         if smoothing:
+            # The smoothing overload asks OCCT for C2 continuity, which its
+            # variational solver cannot reach below degree 5.
             spline_builder = GeomAPI_PointsToBSplineSurface(
-                points_, *smoothing, DegMax=max_deg, Tol3D=tol
+                points_, *smoothing, DegMax=max(max_deg, 5), Tol3D=tol
             )
         else:
             spline_builder = GeomAPI_PointsToBSplineSurface(

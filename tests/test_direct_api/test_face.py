@@ -41,7 +41,15 @@ from OCP.Geom import Geom_CylindricalSurface, Geom_OffsetSurface
 from OCP.StdFail import StdFail_NotDone
 
 from build123d.build_common import GridLocations, Locations, PolarLocations
-from build123d.build_enums import Align, CenterOf, ContinuityLevel, GeomType, Keep, Mode
+from build123d.build_enums import (
+    Align,
+    CenterOf,
+    ContinuityLevel,
+    GeomType,
+    Keep,
+    Mode,
+    Unit,
+)
 from build123d.build_line import BuildLine
 from build123d.build_part import BuildPart
 from build123d.build_sketch import BuildSketch
@@ -71,6 +79,7 @@ from build123d.topology import (
     Solid,
     Vertex,
     Wire,
+    sort_wires_by_build_order,
 )
 
 
@@ -1554,6 +1563,81 @@ class TestFaceValidation(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "which was unexpected"):
                 Face.sew_faces(faces)
+
+
+class TestSortWiresByBuildOrder(unittest.TestCase):
+    def test_outer_wire_first_then_holes(self):
+        outer = Wire.make_rect(10, 10)
+        holes = [
+            Wire.make_circle(1, Plane((-2, 0))),
+            Wire.make_circle(1, Plane((2, 0))),
+        ]
+        groups = sort_wires_by_build_order([outer, *holes])
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(len(groups[0]), 3)
+        self.assertAlmostEqual(groups[0][0].length, 40, 5)
+        for inner in groups[0][1:]:
+            self.assertAlmostEqual(inner.length, 2 * math.pi, 5)
+
+    def test_a_single_wire_is_returned_as_is(self):
+        outer = Wire.make_rect(10, 10)
+        self.assertEqual(sort_wires_by_build_order([outer]), [[outer]])
+
+
+class TestFaceProperties(unittest.TestCase):
+    def test_semi_angle_of_a_cone(self):
+        """The magnitude is atan(radius change / height); OCCT signs it
+        against the cone's axis, so a narrowing cone reads negative."""
+        for bottom, top, height in ((5, 0, 5), (5, 0, 10), (5, 2, 5)):
+            with self.subTest(bottom=bottom, top=top, height=height):
+                lateral = Cone(bottom, top, height).faces().filter_by(GeomType.CONE)[0]
+                expected = math.degrees(math.atan((bottom - top) / height))
+                self.assertAlmostEqual(abs(lateral.semi_angle), expected, 5)
+
+    def test_semi_angle_of_other_surfaces(self):
+        self.assertIsNone(Rectangle(1, 1).face().semi_angle)
+        cylinder = Cylinder(1, 2).faces().filter_by(GeomType.CYLINDER)[0]
+        self.assertIsNone(cylinder.semi_angle)
+
+    def test_a_face_has_no_mass_or_volume(self):
+        face = Rectangle(2, 3).face()
+        self.assertEqual(face.volume, 0.0)
+        self.assertEqual(face.mass(), 0.0)
+        self.assertEqual(face.mass(Unit.KG, Unit.M), 0.0)
+
+
+class TestSurfaceFromArrayOfPoints(unittest.TestCase):
+    @staticmethod
+    def _grid():
+        return [
+            [Vector(x, y, math.sin(x / 3) * math.cos(y / 3)) for x in range(6)]
+            for y in range(6)
+        ]
+
+    def test_variational_smoothing(self):
+        """Smoothing needs degree 5 for the C2 continuity OCCT asks of it; the
+        default max_deg of 3 is raised to suit rather than failing."""
+        grid = self._grid()
+        plain = Face.make_surface_from_array_of_points(grid)
+        for weights in ((1.0, 1.0, 1.0), (1.0, 5.0, 10.0), (0.1, 1.0, 10.0)):
+            with self.subTest(smoothing=weights):
+                smoothed = Face.make_surface_from_array_of_points(
+                    grid, smoothing=weights
+                )
+                self.assertAlmostEqual(smoothed.area, plain.area, 1)
+
+    def test_explicit_max_deg_is_not_lowered(self):
+        surface = Face.make_surface_from_array_of_points(
+            self._grid(), smoothing=(1.0, 1.0, 1.0), max_deg=8
+        )
+        self.assertGreater(surface.area, 0)
+
+
+class TestFillet2DNoVertices(unittest.TestCase):
+    def test_returns_self(self):
+        face = Rectangle(10, 10).face()
+        self.assertIs(face.fillet_2d(1, []), face)
 
 
 class TestWrapValidation(unittest.TestCase):

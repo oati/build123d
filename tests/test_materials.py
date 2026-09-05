@@ -52,6 +52,7 @@ from build123d.build_constants import G_PER_LB
 from build123d.build_enums import Unit
 from build123d.exporters3d import export_gltf
 from build123d.objects_part import Box, Sphere
+from build123d.topology import Compound
 
 #
 # mass/volume calculation
@@ -502,6 +503,33 @@ class TestMaterialTextureTransforms(unittest.TestCase):
             FinishedMaterial(
                 metals.brass().material, pbr=metals.brass().pbr, scale=(2.0, 2.0)
             )
+
+
+class TestMaterialInheritance(unittest.TestCase):
+    """A part with no material of its own takes the nearest ancestor's."""
+
+    def test_inherited_from_an_ancestor(self):
+        part = Box(1, 1, 1).solid()
+        assembly = Compound(label="assembly", children=[part])
+        assembly.material = metals.brass()
+
+        self.assertIs(part.material, assembly.material)
+        # the walk caches the result so the next lookup is a straight read
+        self.assertIsNotNone(part._material)
+
+    def test_own_material_wins_over_the_ancestor(self):
+        walnut = wood.walnut()
+        part = Box(1, 1, 1).solid()
+        part.material = walnut
+        assembly = Compound(label="assembly", children=[part])
+        assembly.material = metals.brass()
+
+        self.assertIs(part.material, walnut)
+
+    def test_no_material_anywhere_in_the_tree(self):
+        part = Box(1, 1, 1).solid()
+        Compound(label="assembly", children=[part])
+        self.assertIsNone(part.material)
 
 
 if __name__ == "__main__":

@@ -203,6 +203,13 @@ class InsertTests(unittest.TestCase):
 
 
 class BoundingBoxTests(unittest.TestCase):
+    def test_uses_the_builder_object_by_default(self):
+        """Called with no argument inside a builder, it boxes what is there."""
+        with BuildPart() as builder:
+            Box(10, 5, 2)
+            box = bounding_box()
+        self.assertAlmostEqual(box.volume, 100, 5)
+
     def test_boundingbox_to_sketch(self):
         """Test using bounding box to locate objects"""
         with BuildSketch() as mickey:
@@ -690,6 +697,16 @@ class OffsetTests(unittest.TestCase):
         self.assertAlmostEqual(c.area, pi * (0.5 + 0.125) ** 2, 5)
         self.assertEqual(len(c.face().inner_wires()), 0)
 
+    def test_offset_a_bare_solid(self):
+        """A Solid rather than the Part a builder would hand back."""
+        hollowed = offset(Solid.make_box(10, 10, 10), amount=-1, openings=[])
+        self.assertAlmostEqual(hollowed.volume, 8**3, 5)
+
+    def test_offset_returns_a_curve_for_edges(self):
+        result = offset(Edge.make_line((0, 0), (10, 0)), amount=1, side=Side.LEFT)
+        self.assertIsInstance(result, Curve)
+        self.assertGreater(len(result.edges()), 1)
+
     def test_offset_bad_type(self):
         with self.assertRaises(TypeError):
             offset(Vertex(), amount=1)
@@ -831,6 +848,15 @@ class ScaleTests(unittest.TestCase):
             scale(by=2, mode=Mode.REPLACE)
         self.assertAlmostEqual(test.edges()[0].length, 2.0, 5)
 
+    def test_algebra_mode_return_types(self):
+        curve = scale(Edge.make_line((0, 0), (1, 0)), 2)
+        self.assertIsInstance(curve, Curve)
+        self.assertAlmostEqual(sum(e.length for e in curve.edges()), 2, 5)
+
+        sketch = scale(Rectangle(1, 1).face(), 2)
+        self.assertIsInstance(sketch, Sketch)
+        self.assertAlmostEqual(sketch.area, 4, 5)
+
     def test_sketch(self):
         with BuildSketch() as test:
             Rectangle(1, 1)
@@ -869,7 +895,44 @@ class ScaleTests(unittest.TestCase):
             scale(by=2)
 
 
+class SplitReturnTypeTests(unittest.TestCase):
+    """split returns the type matching the dimension it was given."""
+
+    def test_returns_a_sketch_for_faces(self):
+        result = split(Rectangle(10, 10).face(), Plane.YZ, keep=Keep.TOP)
+        self.assertIsInstance(result, Sketch)
+        self.assertAlmostEqual(result.area, 50, 5)
+
+    def test_returns_a_curve_for_edges(self):
+        result = split(Edge.make_line((-5, 0), (5, 0)), Plane.YZ, keep=Keep.TOP)
+        self.assertIsInstance(result, Curve)
+        self.assertAlmostEqual(sum(e.length for e in result.edges()), 5, 5)
+
+    def test_returns_a_part_for_solids(self):
+        result = split(Box(10, 10, 10).solid(), Plane.YZ, keep=Keep.TOP)
+        self.assertIsInstance(result, Part)
+        self.assertAlmostEqual(result.volume, 500, 5)
+
+    def test_keeping_both_halves(self):
+        result = split(Rectangle(10, 10).face(), Plane.YZ, keep=Keep.BOTH)
+        self.assertIsInstance(result, Sketch)
+        self.assertEqual(len(result.faces()), 2)
+        self.assertAlmostEqual(result.area, 100, 5)
+
+
 class TestSweep(unittest.TestCase):
+    def test_fixed_normal(self):
+        """normal= holds the section's orientation instead of letting it follow
+        the path's own framing, which gives a different solid."""
+        path = Spline((0, 0, 0), (5, 3, 5), (10, 0, 10)).edge()
+        section = Plane(origin=(0, 0, 0), z_dir=path.tangent_at(0)) * Rectangle(2, 1)
+
+        following = sweep(section, path)
+        fixed = sweep(section, path, normal=(0, 0, 1))
+
+        self.assertGreater(abs(following.volume - fixed.volume), 1e-6)
+        self.assertAlmostEqual(fixed.volume, 20, 3)
+
     def test_single_section(self):
         with BuildPart() as test:
             with BuildLine():

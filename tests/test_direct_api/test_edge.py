@@ -113,6 +113,15 @@ class TestEdge(unittest.TestCase):
         )
         self.assertAlmostEqual(spline.end_point(), (3, 0, 0), 5)
 
+        # smoothing needs degree 5 for C2; a lower max_deg is raised to suit
+        # rather than failing the approximation
+        spline = Edge.make_spline_approx(
+            [(i, (i % 3) * 1.5) for i in range(8)],
+            smoothing=(1.0, 1.0, 1.0),
+            max_deg=3,
+        )
+        self.assertAlmostEqual(spline.end_point(), (7, 1.5, 0), 5)
+
     def test_make_bspline(self):
         control_points = [(0, 0), (1, 1), (2, 0)]
         knots = [0.0, 0.0, 0.0, 1.0, 1.0, 1.0]
