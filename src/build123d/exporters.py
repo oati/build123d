@@ -599,7 +599,7 @@ class ExportDXF(Export2D):
                     description=desc,
                 )
             else:
-                raise ValueError("Unknown linetype `{linetype}`.")
+                raise ValueError(f"Unknown linetype `{linetype}`.")
         return linetype
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

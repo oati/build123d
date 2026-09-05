@@ -632,7 +632,7 @@ class TestShape(unittest.TestCase):
         self.assertIs(empty, empty.transform_geometry(Matrix(translate_matrix)))
         with self.assertRaises(ValueError):
             empty.locate(Location())
-        
+
         with self.assertRaises(ValueError):
             empty.located(Location())
         with self.assertRaises(ValueError):
@@ -837,6 +837,13 @@ class TestShapeCast(unittest.TestCase):
             ta.TopAbs_COMPSOLID,
         }
         self.assertEqual(set(Shape.shape_constructors), expected)
+
+
+class TestMakeComposite(unittest.TestCase):
+    def test_unregistered_factory(self):
+        with patch.object(Shape, "composite_factories", {}):
+            with self.assertRaisesRegex(RuntimeError, "factory is not registered"):
+                Shape.make_composite([Solid.make_box(1, 1, 1)])
 
 
 class TestAsShape(unittest.TestCase):

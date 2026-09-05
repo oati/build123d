@@ -31,13 +31,14 @@ import os
 import platform
 import random
 import unittest
-from unittest.mock import PropertyMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
 from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt
 from OCP.Geom import Geom_RectangularTrimmedSurface
 from OCP.GeomAPI import GeomAPI_ExtremaCurveCurve
 from OCP.Geom import Geom_CylindricalSurface, Geom_OffsetSurface
+from OCP.StdFail import StdFail_NotDone
 
 from build123d.build_common import GridLocations, Locations, PolarLocations
 from build123d.build_enums import Align, CenterOf, ContinuityLevel, GeomType, Keep, Mode
@@ -61,7 +62,16 @@ from build123d.objects_sketch import (
 from build123d.operations_generic import fillet, offset
 from build123d.operations_part import extrude
 from build123d.operations_sketch import make_face
-from build123d.topology import Compound, Edge, Face, Shell, Sketch, Solid, Wire
+from build123d.topology import (
+    Compound,
+    Edge,
+    Face,
+    Shell,
+    Sketch,
+    Solid,
+    Vertex,
+    Wire,
+)
 
 
 class TestFace(unittest.TestCase):
@@ -295,9 +305,7 @@ class TestFace(unittest.TestCase):
 
     def test_uv_face(self):
         dome = Sphere(1, rotation=(90, 0, 0))
-        domed_box = Box(
-            1, 1, 1, align=(Align.CENTER, Align.CENTER, Align.MIN)
-        ) & dome
+        domed_box = Box(1, 1, 1, align=(Align.CENTER, Align.CENTER, Align.MIN)) & dome
         domed_box -= Cylinder(0.1, 1, align=Align.NONE)
         spherical_face = domed_box.faces().filter_by(GeomType.SPHERE)[0]
 
@@ -1488,6 +1496,148 @@ class TestAxesOfSysmmetrySplitNone(unittest.TestCase):
 
         # Restore the original split method (cleanup).
         Face.split = original_split
+
+
+class TestFaceValidation(unittest.TestCase):
+    """Rejection paths of Face construction and surface building"""
+
+    def test_extrude_rejects_an_empty_object(self):
+        with self.assertRaisesRegex(ValueError, "Can't extrude empty object"):
+            Face.extrude(Edge(), (0, 0, 1))
+
+    def test_surface_exterior_rejects_empty_edges(self):
+        with self.assertRaisesRegex(ValueError, "exterior contains empty edges"):
+            Face.make_surface([Edge.make_line((0, 0), (1, 0)), Edge()])
+
+    def test_surface_interior_rejects_an_empty_wire(self):
+        exterior = Wire.make_rect(10, 10)
+        with self.assertRaisesRegex(ValueError, "empty wire"):
+            Face.make_surface(exterior, interior_wires=[Wire()])
+
+    def test_make_surface_rejects_an_invalid_result(self):
+        exterior = Wire.make_rect(10, 10)
+        with patch.object(
+            Face, "is_valid", new_callable=PropertyMock, return_value=False
+        ):
+            with self.assertRaisesRegex(RuntimeError, "non planar face is invalid"):
+                Face.make_surface(exterior)
+
+    def test_surface_from_points_reports_a_failed_approximation(self):
+        points = [[Vector(x, y, 0) for x in range(3)] for y in range(3)]
+        with patch(
+            "build123d.topology.two_d.GeomAPI_PointsToBSplineSurface"
+        ) as builder:
+            builder.return_value.IsDone.return_value = False
+            with self.assertRaisesRegex(ValueError, "B-spline approximation failed"):
+                Face.make_surface_from_array_of_points(points)
+
+    def test_surface_from_curves_type_checks(self):
+        edge = Edge.make_line((0, 0), (1, 0))
+        wire = Wire([Edge.make_line((0, 1), (1, 1))])
+        with self.assertRaisesRegex(TypeError, "same type"):
+            Face.make_surface_from_curves(edge, wire)
+        with self.assertRaisesRegex(ValueError, "Unexpected argument"):
+            Face.make_surface_from_curves(edge1=edge, edge2=edge, nonsense=1)
+        with self.assertRaisesRegex(TypeError, "same type"):
+            Face.make_surface_from_curves(edge1="not a curve", edge2=edge)
+
+    def test_project_to_a_vertex_is_unsupported(self):
+        face = Face.make_rect(2, 2)
+        with self.assertRaisesRegex(TypeError, "projection to a vertex"):
+            face.project_to_shape(Vertex(0, 0, 5), (0, 0, -1))
+
+    def test_sew_faces_reports_an_unexpected_result(self):
+        faces = [Face.make_rect(1, 1), Face.make_rect(1, 1, Plane.XZ)]
+        with patch(
+            "build123d.topology.two_d._sew_topods_faces",
+            return_value=Edge.make_line((0, 0), (1, 0)).wrapped,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "which was unexpected"):
+                Face.sew_faces(faces)
+
+
+class TestWrapValidation(unittest.TestCase):
+    """Rejection paths of Mixin2D.wrap / _wrap_edge"""
+
+    def setUp(self):
+        self.surface = (
+            Cylinder(5, 10).faces().filter_by(GeomType.PLANE, reverse=True)[0]
+        )
+        self.target = self.surface.location_at(0.5, 0.5, x_dir=(1, 0, 0))
+        self.edge = Edge.make_line((0, 0), (3, 3))
+
+    def test_empty_surface(self):
+        with self.assertRaisesRegex(ValueError, "Can't wrap around an empty face"):
+            Face().wrap(self.edge, self.target)
+
+    def test_wrapping_runs_off_the_surface(self):
+        """An edge longer than the surface finds no face to intersect."""
+        too_long = Edge.make_line((0, 0), (0, 40))
+        with self.assertRaisesRegex(RuntimeError, "over surface boundary"):
+            self.surface.wrap(too_long, self.target)
+
+    def test_wrapping_over_the_surface_boundary(self):
+        """A face is found but the axis misses it."""
+        with patch.object(Face, "find_intersection_points", return_value=[]):
+            with self.assertRaisesRegex(RuntimeError, "over surface boundary"):
+                self.surface.wrap(self.edge, self.target)
+
+    def test_length_error_exceeds_tolerance(self):
+        with self.assertRaisesRegex(RuntimeError, "exceeds tolerance"):
+            self.surface.wrap(self.edge, self.target, tolerance=1e-12)
+
+    def test_invalid_wrapped_edge(self):
+        with patch.object(
+            Edge, "is_valid", new_callable=PropertyMock, return_value=False
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Wrapped edge is invalid"):
+                self.surface.wrap(self.edge, self.target)
+
+    def test_projection_failure(self):
+        with patch("build123d.topology.two_d.GeomProjLib") as geom_proj_lib:
+            geom_proj_lib.Project_s.return_value = None
+            with self.assertRaisesRegex(RuntimeError, "Projection failed"):
+                self.surface.wrap(self.edge, self.target)
+
+
+class TestSurfaceHoles(unittest.TestCase):
+    """Both hole-adding paths report an OCCT failure the same way."""
+
+    def setUp(self):
+        self.surface = Sphere(5).faces()[0]
+        self.hole = Wire.make_circle(0.5, Plane(self.surface.location_at(0.5, 0.5)))
+
+    @staticmethod
+    def _failing_make_face():
+        make_face_object = MagicMock()
+        make_face_object.Face.side_effect = StdFail_NotDone("not done")
+        return make_face_object
+
+    def test_make_holes_reports_a_failure(self):
+        with patch(
+            "build123d.topology.two_d.BRepBuilderAPI_MakeFace",
+            return_value=self._failing_make_face(),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Error adding interior hole"):
+                self.surface.make_holes([self.hole])
+
+    def test_add_surface_holes_reports_a_failure(self):
+        with patch(
+            "build123d.topology.two_d.BRepBuilderAPI_MakeFace",
+            return_value=self._failing_make_face(),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Error adding interior hole"):
+                Face._add_surface_holes(self.surface, [self.hole])
+
+
+class TestShellValidation(unittest.TestCase):
+    def test_rejects_an_empty_face(self):
+        with self.assertRaisesRegex(ValueError, "Can't create a Shell from empty Face"):
+            Shell(Face())
+
+    def test_negate_rejects_an_empty_face(self):
+        with self.assertRaisesRegex(ValueError, "Invalid Shape"):
+            -Face()
 
 
 if __name__ == "__main__":

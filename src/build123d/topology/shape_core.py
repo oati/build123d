@@ -594,7 +594,7 @@ class Shape(NodeMixin, Generic[TOPODS]):
     @property
     def orientation(self) -> Vector:
         """Get the orientation component of this Shape's Location"""
-        if self.location is None:
+        if self._wrapped is None:
             raise ValueError("Can't find the orientation of an empty shape")
         return self.location.orientation
 
@@ -3757,8 +3757,6 @@ class Joint(ABC):
 
     def _reparent(self, parent: Solid | Compound) -> None:
         """Bind this joint to a new parent without changing its location."""
-        if self.parent.location is None:
-            raise ValueError("Joint parent location is not set")
         relative_to_new_parent = parent.location.inverse() * self.parent.location
         if hasattr(self, "relative_location"):
             self.relative_location = relative_to_new_parent * self.relative_location

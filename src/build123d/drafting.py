@@ -593,10 +593,6 @@ class ExtensionLine(BaseSketchObject):
             # to the offset (offset is the perpendicular displacement of the line).
             # The 90° rotation in the XY plane is offset × Z.
             measurement_direction = offset_vector.cross(Vector(0, 0, 1))
-            if measurement_direction.length < TOLERANCE:
-                raise ValueError(
-                    "offset vector must have a non-zero component in the XY plane"
-                )
 
         if measurement_direction is not None:
             measure_object_span = object_to_measure.position_at(

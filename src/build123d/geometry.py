@@ -3292,8 +3292,6 @@ class Plane(metaclass=PlaneMeta):
             Plane: plane with new origin
 
         """
-        if hasattr(locator, "wrapped") and locator.wrapped is None:
-            raise ValueError("Can't shift origin to empty locator")
         if hasattr(locator, "wrapped") and isinstance(locator.wrapped, TopoDS_Vertex):
             geom_point = BRep_Tool.Pnt_s(locator.wrapped)
             new_origin = Vector(geom_point.X(), geom_point.Y(), geom_point.Z())
@@ -3438,8 +3436,6 @@ class Plane(metaclass=PlaneMeta):
                 gp_Pnt(*local_top_right),
             )
             return BoundBox(local_bbox)
-        if hasattr(obj, "wrapped") and obj.wrapped is None:  # Empty shape
-            raise ValueError("Cant's reposition empty object")
         if hasattr(obj, "wrapped") and isinstance(obj.wrapped, TopoDS_Shape):  # Shapes
             # return_value = obj.transform_shape(transform_matrix)
             downcast_lut: dict[

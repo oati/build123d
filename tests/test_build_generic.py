@@ -28,6 +28,8 @@ license:
 
 import unittest
 from math import pi, sqrt
+from unittest.mock import patch
+
 from build123d import *
 from build123d import Builder, LocationList
 
@@ -175,6 +177,29 @@ class InsertTests(unittest.TestCase):
             with BuildPart() as test:
                 add(Solid.make_box(1, 1, 1))
         self.assertAlmostEqual(test.part.volume, 1, 5)
+
+    def test_no_locations_context(self):
+        with BuildPart():
+            with patch("build123d.operations_generic.LocationList") as location_list:
+                location_list._get_context.return_value = None
+                with self.assertRaisesRegex(RuntimeError, "no active Locations"):
+                    insert(Face.make_rect(1, 1))
+
+    def test_unsupported_builder(self):
+        """A builder that isn't a part, sketch or line builder."""
+
+        class _Unsupported:
+            pass
+
+        with BuildLine():
+            with patch.multiple(
+                "build123d.operations_generic",
+                BuildPart=_Unsupported,
+                BuildSketch=_Unsupported,
+                BuildLine=_Unsupported,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "is unsupported"):
+                    insert(Edge.make_line((0, 0), (1, 0)))
 
 
 class BoundingBoxTests(unittest.TestCase):
@@ -343,6 +368,17 @@ class ChamferTests(unittest.TestCase):
                 Polyline((0, 0), (10, 0), (10, 10))
                 chamfer(test.edges()[0], length=1)
 
+    def test_nothing_to_chamfer(self):
+        """An edge with no topological parent."""
+        with self.assertRaisesRegex(ValueError, "Nothing to chamfer"):
+            chamfer(Edge.make_line((0, 0), (1, 0)), length=0.1)
+
+    def test_invalid_dimension(self):
+        """A parent compound of mixed dimension has no _dim to dispatch on."""
+        mixed = Compound([Box(1, 1, 1).solid(), Edge.make_line((5, 0), (6, 0))])
+        with self.assertRaisesRegex(ValueError, "Invalid object dimension"):
+            chamfer(mixed.edges()[0], length=0.1)
+
 
 class FilletTests(unittest.TestCase):
     def test_part_chamfer(self):
@@ -380,6 +416,27 @@ class FilletTests(unittest.TestCase):
             with BuildSketch() as square:
                 Rectangle(1, 1)
                 fillet(square.edges(), radius=1)
+
+    def test_no_objects(self):
+        with self.assertRaisesRegex(ValueError, "No objects provided"):
+            fillet(None, radius=1)
+
+    def test_nothing_to_fillet(self):
+        """An edge with no topological parent."""
+        with self.assertRaisesRegex(ValueError, "Nothing to fillet"):
+            fillet(Edge.make_line((0, 0), (1, 0)), radius=0.1)
+
+    def test_1d_requires_vertices(self):
+        with BuildLine() as line:
+            Polyline((0, 0), (5, 0), (5, 5))
+        with self.assertRaisesRegex(ValueError, "takes only Vertices"):
+            fillet(line.line.edges(), radius=1)
+
+    def test_invalid_dimension(self):
+        """A parent compound of mixed dimension has no _dim to dispatch on."""
+        mixed = Compound([Box(1, 1, 1).solid(), Edge.make_line((5, 0), (6, 0))])
+        with self.assertRaisesRegex(ValueError, "Invalid object dimension"):
+            fillet(mixed.edges()[0], radius=0.1)
 
 
 class HexArrayTests(unittest.TestCase):
@@ -488,6 +545,10 @@ class MirrorTests(unittest.TestCase):
             mirror(about=Plane.XY)
             construction_face = p.faces().sort_by(Axis.Z)[0]
             self.assertEqual(construction_face.geom_type, GeomType.PLANE)
+
+    def test_no_objects(self):
+        with self.assertRaisesRegex(ValueError, "objects must be provided"):
+            mirror()
 
 
 class OffsetTests(unittest.TestCase):
@@ -652,6 +713,10 @@ class OffsetTests(unittest.TestCase):
                 tuple(original_face.normal_at()), tuple(offset_face.normal_at()), 3
             )
 
+    def test_no_objects(self):
+        with self.assertRaisesRegex(ValueError, "objects must be provided"):
+            offset(amount=1)
+
 
 class PolarLocationsTests(unittest.TestCase):
     def test_errors(self):
@@ -736,6 +801,19 @@ class ProjectionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             with BuildLine():
                 pnt = project(Vertex(1, 2, 3))[0]
+
+    def test_no_target(self):
+        """A part builder with nothing built yet has no projection target."""
+        with self.assertRaisesRegex(ValueError, "target object could not be dete"):
+            with BuildPart():
+                project(Face.make_rect(1, 1))
+
+    def test_parallel_projection_axis(self):
+        """The projection axis is normal to the working plane by construction,
+        so a parallel intersection can only be simulated."""
+        with patch.object(Plane, "intersect", return_value=Axis.Z):
+            with self.assertRaisesRegex(RuntimeError, "are parallel"):
+                project([Vector(1, 1, 1)], workplane=Plane.XY, mode=Mode.PRIVATE)
 
 
 class RectangularArrayTests(unittest.TestCase):

@@ -689,6 +689,10 @@ class Mixin2D(ABC, Shape[TOPODS]):
             faces = self.faces_intersected_by_axis(axis).sort_by(
                 lambda f: f.distance_to(point)
             )
+            if not faces:
+                raise RuntimeError(
+                    "wrapping over surface boundary, try difference surface_loc"
+                )
             face = faces[0]  # pylint: disable=no-member
             inter = face.find_intersection_points(axis)  # pylint: disable=no-member
             if not inter:

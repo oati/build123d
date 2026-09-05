@@ -168,5 +168,15 @@ class TestCompound(unittest.TestCase):
         self.assertEqual(b1.get_top_level_shapes()[0], b1)
 
 
+class TestCompoundTreeValidation(unittest.TestCase):
+    def test_parent_must_be_a_compound(self):
+        with self.assertRaisesRegex(ValueError, "must be of type Compound"):
+            Compound()._pre_attach(Solid.make_box(1, 1, 1))
+
+    def test_children_must_be_shapes(self):
+        with self.assertRaisesRegex(ValueError, "must be of type Shape"):
+            Compound()._pre_attach_children([1, 2])
+
+
 if __name__ == "__main__":
     unittest.main()

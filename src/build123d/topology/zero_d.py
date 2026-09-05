@@ -330,9 +330,6 @@ def topo_explore_common_vertex(
     topods_edge1 = edge1 if isinstance(edge1, TopoDS_Edge) else edge1.wrapped
     topods_edge2 = edge2 if isinstance(edge2, TopoDS_Edge) else edge2.wrapped
 
-    if topods_edge1 is None or topods_edge2 is None:
-        raise ValueError("edge is empty")
-
     # Explore vertices of the first edge
     vert_exp = TopExp_Explorer(topods_edge1, ta.TopAbs_VERTEX)
     while vert_exp.More():
