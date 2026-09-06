@@ -187,11 +187,22 @@ class Compound(Mixin3D[TopoDS_Compound]):
         return sum(i.volume for i in [*self.get_type(Solid), *self.get_type(Shell)])
 
     def mass(self, mass_unit: Unit = Unit.G, length_unit: Unit = Unit.MM) -> float:
-        """mass - the mass of this Compound"""
+        """mass - the mass of this Compound
+
+        An assembly is summed over its children so each one contributes its own
+        material; Shape.material walks up the tree for children that don't
+        declare one. A Compound with no children is summed over its topology
+        instead, where the sub-shapes are not build123d objects and can only
+        take this Compound's material.
+        """
+        if self.children:
+            return sum(child.mass(mass_unit, length_unit) for child in self.children)
+
         masses = []
         for s in [*self.get_type(Solid), *self.get_type(Shell)]:
-            if s._material is None:
-                s._material = self.material
+            # get_type builds fresh wrappers from the topology, so these never
+            # carry a material of their own.
+            s._material = self.material
             masses.append(s.mass(mass_unit, length_unit))
         return sum(masses)
 
@@ -523,12 +534,12 @@ class Compound(Mixin3D[TopoDS_Compound]):
 
     def __and__(self, other: Shape | Iterable[Shape]) -> Compound:
         """Intersect other to self `&` operator"""
+        # Shape.__and__ resolves any ShapeList to a single shape before
+        # returning, so this only ever sees a Shape or None.
         intersection = Shape.__and__(self, other)
         if intersection is None:
             return Compound()
-        if isinstance(intersection, list):
-            intersection = Shape.make_composite(intersection)
-        elif not isinstance(intersection, Compound):
+        if not isinstance(intersection, Compound):
             intersection = Shape.make_composite([intersection])
         self.copy_attributes_to(intersection, ["wrapped", "_NodeMixin__children"])
         return intersection

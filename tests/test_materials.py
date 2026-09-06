@@ -505,6 +505,41 @@ class TestMaterialTextureTransforms(unittest.TestCase):
             )
 
 
+class TestAssemblyMass(unittest.TestCase):
+    """An assembly sums its children, so each contributes its own material."""
+
+    def setUp(self):
+        self.brass_block = Box(10, 10, 10).solid()
+        self.brass_block.material = metals.brass()
+        self.walnut_block = Box(10, 10, 10).solid()
+        self.walnut_block.material = wood.walnut()
+        self.expected = self.brass_block.mass() + self.walnut_block.mass()
+
+    def test_children_keep_their_own_materials(self):
+        assembly = Compound(
+            label="assembly", children=[self.brass_block, self.walnut_block]
+        )
+        self.assertAlmostEqual(assembly.mass(), self.expected, 6)
+
+    def test_a_child_without_a_material_inherits(self):
+        plain = Box(10, 10, 10).solid()
+        assembly = Compound(label="assembly", children=[self.brass_block, plain])
+        assembly.material = wood.walnut()
+        self.assertAlmostEqual(assembly.mass(), self.expected, 6)
+
+    def test_nested_assemblies(self):
+        inner = Compound(label="inner", children=[self.walnut_block])
+        outer = Compound(label="outer", children=[self.brass_block, inner])
+        self.assertAlmostEqual(outer.mass(), self.expected, 6)
+
+    def test_a_compound_without_children_uses_its_own_material(self):
+        """Sub-shapes of a plain Compound are topology, not build123d objects,
+        so they can only take the Compound's material."""
+        compound = Compound([Box(10, 10, 10).solid(), Box(10, 10, 10).solid()])
+        compound.material = metals.brass()
+        self.assertAlmostEqual(compound.mass(), 2 * self.brass_block.mass(), 6)
+
+
 class TestMaterialInheritance(unittest.TestCase):
     """A part with no material of its own takes the nearest ancestor's."""
 
